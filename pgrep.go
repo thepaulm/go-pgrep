@@ -23,11 +23,9 @@ func (b *Buffer) String() string {
 }
 
 /* Search a buffer for the string. */
-func search(c chan *Buffer) {
-	fmt.Printf("I am searching: %v\n", c)
+func search(c <-chan *Buffer) {
 	for {
 		b := <-c
-		fmt.Println("I GOT MY THING!")
 		fmt.Println(b)
 	}
 }
@@ -43,19 +41,16 @@ func main() {
 	var err error
 	var buf *Buffer
 
-	/* Make an array of channels that take byte arrays */
-	channels := make([]chan *Buffer, concurrency)
+	c := make(chan *Buffer)
 
 	/* Start all the go routines */
 	for i := 0; i < concurrency; i++ {
-		channels[i] = make(chan *Buffer)
-		go search(channels[i])
+		go search(c)
 	}
 
 	buf, err = getBuffer(os.Stdin)
 	for err == nil {
-		fmt.Printf("%d bytes read\n", buf.cnt)
-		channels[0] <- buf
+		c <- buf
 		buf, err = getBuffer(os.Stdin)
 	}
 	fmt.Printf("err is %v\n", err)
