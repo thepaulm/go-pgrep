@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"sync"
 )
 
 const bufsize = 128
@@ -23,9 +24,13 @@ func (b *Buffer) String() string {
 }
 
 /* Search a buffer for the string. */
-func search(c <-chan *Buffer) {
+func search(c <-chan *Buffer, wg *sync.WaitGroup) {
 	for {
 		b := <-c
+		if b == nil {
+			wg.Done()
+			return
+		}
 		fmt.Println(b)
 	}
 }
@@ -40,18 +45,25 @@ func getBuffer(f *os.File) (*Buffer, error) {
 func main() {
 	var err error
 	var buf *Buffer
+	var wg sync.WaitGroup
 
 	c := make(chan *Buffer)
 
 	/* Start all the go routines */
 	for i := 0; i < concurrency; i++ {
-		go search(c)
+		go search(c, &wg)
 	}
+	wg.Add(concurrency)
 
 	buf, err = getBuffer(os.Stdin)
 	for err == nil {
 		c <- buf
 		buf, err = getBuffer(os.Stdin)
 	}
-	fmt.Printf("err is %v\n", err)
+
+	/* Close down all of the go routines */
+	for i := 0; i < concurrency; i++ {
+		c <- nil
+	}
+	wg.Wait()
 }
