@@ -24,7 +24,7 @@ func (b *Buffer) String() string {
 }
 
 /* Search a buffer for the string. */
-func search(c <-chan *Buffer, wg *sync.WaitGroup) {
+func search(c <-chan *Buffer, needle string, wg *sync.WaitGroup) {
 	for {
 		b := <-c
 		if b == nil {
@@ -47,11 +47,13 @@ func main() {
 	var buf *Buffer
 	var wg sync.WaitGroup
 
+	var needle = os.Args[1]
+
 	c := make(chan *Buffer)
 
 	/* Start all the go routines */
 	for i := 0; i < concurrency; i++ {
-		go search(c, &wg)
+		go search(c, needle, &wg)
 	}
 	wg.Add(concurrency)
 
