@@ -14,6 +14,12 @@ type Buffer struct {
 	cnt int
 }
 
+type LineInfo struct {
+	start int
+	value string
+	end   int
+}
+
 func NewBuffer(size int) *Buffer {
 	/* This is called a composite literal */
 	return &Buffer{make([]byte, size), 0}
@@ -35,7 +41,6 @@ func (b *Buffer) String() string {
    line number offsets and print them in order.
 
    for example:
-   3,
    {58, "", 63},
    {64, "here it is", 75},
    {76, "", 80}
