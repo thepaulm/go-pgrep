@@ -10,19 +10,31 @@ const bufsize = 128
 const concurrency = 16
 
 type Buffer struct {
-	buf []byte
-	cnt int
+	buf    []byte
+	offset int
+	cnt    int
 }
 
-type LineInfo struct {
+const (
+	newline = iota
+	match   = iota
+	bufend  = iota
+)
+
+type Result struct {
 	start int
 	value string
 	end   int
+	rtype int // see iotas above
+}
+
+func (r *Result) String() string {
+	return fmt.Sprintf("{%d, %s, %d, %d}", r.start, r.value, r.end, r.rtype)
 }
 
 func NewBuffer(size int) *Buffer {
 	/* This is called a composite literal */
-	return &Buffer{make([]byte, size), 0}
+	return &Buffer{make([]byte, size), 0, 0}
 }
 
 func (b *Buffer) String() string {
@@ -50,21 +62,33 @@ func (b *Buffer) String() string {
 
    and then we need a gatherer to map line numbers and match them up.
 */
-func search(c <-chan *Buffer, needle string, wg *sync.WaitGroup) {
+func search(c <-chan *Buffer, resp chan<- *Result, needle string,
+	wg *sync.WaitGroup) {
 	for {
 		b := <-c
 		if b == nil {
 			wg.Done()
 			return
 		}
+		/* Start the scan */
+		offset := b.offset
+		var i int
+		for i, v := range b.buf {
+			if v == '\n' {
+				resp <- &Result{offset, "", i, newline}
+				offset = i
+			}
+		}
+		resp <- &Result{offset, "", i, bufend}
 		fmt.Println(b)
 	}
 }
 
-func getBuffer(f *os.File) (*Buffer, error) {
+func getBuffer(f *os.File, offset int) (*Buffer, error) {
 	var err error
 	buf := NewBuffer(bufsize)
 	buf.cnt, err = f.Read(buf.buf)
+	buf.offset = offset
 	return buf, err
 }
 
@@ -77,6 +101,7 @@ func main() {
 	var buf *Buffer
 	var wg sync.WaitGroup
 	var needle string
+	offset := 0
 
 	if len(os.Args) > 1 {
 		needle = os.Args[1]
@@ -85,23 +110,25 @@ func main() {
 		os.Exit(0)
 	}
 
-	c := make(chan *Buffer)
+	buffers := make(chan *Buffer)
+	resps := make(chan *Result)
 
 	/* Start all the go routines */
 	for i := 0; i < concurrency; i++ {
-		go search(c, needle, &wg)
+		go search(buffers, resps, needle, &wg)
 	}
 	wg.Add(concurrency)
 
-	buf, err = getBuffer(os.Stdin)
+	buf, err = getBuffer(os.Stdin, offset)
 	for err == nil {
-		c <- buf
-		buf, err = getBuffer(os.Stdin)
+		offset += buf.cnt
+		buffers <- buf
+		buf, err = getBuffer(os.Stdin, offset)
 	}
 
 	/* Close down all of the go routines */
 	for i := 0; i < concurrency; i++ {
-		c <- nil
+		buffers <- nil
 	}
 	wg.Wait()
 }
