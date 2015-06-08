@@ -3,11 +3,16 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"sync"
 )
 
 const bufsize = 128
 const concurrency = 16
+
+func setup_runtime() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
+}
 
 type Buffer struct {
 	buf    []byte
@@ -17,8 +22,8 @@ type Buffer struct {
 
 const (
 	newline = iota
-	match   = iota
-	bufend  = iota
+	match
+	bufend
 )
 
 type Result struct {
@@ -84,6 +89,13 @@ func search(c <-chan *Buffer, resp chan<- *Result, needle string,
 	}
 }
 
+func reduce(c <-chan *Result) {
+	for {
+		r := <-c
+		_ = r
+	}
+}
+
 func getBuffer(f *os.File, offset int) (*Buffer, error) {
 	var err error
 	buf := NewBuffer(bufsize)
@@ -101,6 +113,9 @@ func main() {
 	var buf *Buffer
 	var wg sync.WaitGroup
 	var needle string
+
+	setup_runtime()
+
 	offset := 0
 
 	if len(os.Args) > 1 {
@@ -111,9 +126,11 @@ func main() {
 	}
 
 	buffers := make(chan *Buffer)
+	/* This could maybe be buffered at 1 per searcher? */
 	resps := make(chan *Result)
 
 	/* Start all the go routines */
+	go reduce(resps)
 	for i := 0; i < concurrency; i++ {
 		go search(buffers, resps, needle, &wg)
 	}
