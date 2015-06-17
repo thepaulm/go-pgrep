@@ -20,8 +20,11 @@ type Buffer struct {
 	cnt    int
 }
 
+type ResultType int
+
 const (
-	newline = iota
+	_ = iota
+	newline
 	match
 	bufend
 )
@@ -30,7 +33,7 @@ type Result struct {
 	start int
 	value string
 	end   int
-	rtype int // see iotas above
+	rtype ResultType
 }
 
 func (r *Result) String() string {
