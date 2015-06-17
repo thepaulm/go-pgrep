@@ -50,25 +50,24 @@ func (b *Buffer) String() string {
 }
 
 /* Search a buffer for the string. */
-/* These guys should produce little data snippets:
-   type Line struct {
-	   var start int
-	   var value string
-	   var end int
-   }
+/*
+	These guys should produce little Result structs
+	and then the receiver can read a list of these to reconstruct
+	line number offsets and print them in order.
 
-   and then the receiver can read a list of these to reconstruct
-   line number offsets and print them in order.
+	for example:
+	{58, "", 63, newline},
+	{63, "", 68, bufend},
+	{68, "here it is", 78, match},
+	{78, "", 80, bufend}
 
-   for example:
-   {58, "", 63},
-   {64, "here it is", 75},
-   {76, "", 80}
+	would mean:
+	58 to 63: no match, newline at 63
+	63 to 68: no match, no newline
+	68 to 78: contains the string
+	78 to 80: no match, no newline
 
-   would mean: expect 3 snippets, only the second one matched, use these
-   offset to calculate line numbers.
-
-   and then we need a gatherer to map line numbers and match them up.
+	and then we need a gatherer to map line numbers and match them up.
 */
 func search(c <-chan *Buffer, resp chan<- *Result, needle string,
 	wg *sync.WaitGroup) {
@@ -93,8 +92,37 @@ func search(c <-chan *Buffer, resp chan<- *Result, needle string,
 }
 
 func reduce(c <-chan *Result) {
+	endm := make(map[int]*Result)
+	startm := make(map[int]*Result)
+	lineno := 0
+	lowchar := 0
+	_ = lineno
+	_ = lowchar
 	for {
 		r := <-c
+		/* If we have something in the end map that ends where we started ... */
+		exist, ok := endm[r.start]
+		if ok == true {
+			exist.value += r.value  // Append the str
+			exist.end = r.end       // Add up the new end
+			endm[exist.end] = exist // We now have a new end
+			delete(endm, r.start)   // Remove the old end
+		} else {
+			/* We don't, so just add a new start entry */
+			startm[r.start] = r
+		}
+		/* If we have something in the start map that begins where we ended ... */
+		exist, ok = startm[r.end]
+		if ok == true {
+			r.value += exist.value      // Append the str
+			r.end = exist.end           // Add up the new end
+			startm[r.start] = r         // Our new thing has a start
+			delete(startm, exist.start) // We've prepended, so the old is gone
+			endm[r.end] = r             // Update the end map for this end
+		} else {
+			/* We don't, so just add a new end entry */
+			endm[r.end] = r
+		}
 		_ = r
 	}
 }
