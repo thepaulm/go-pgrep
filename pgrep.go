@@ -123,7 +123,6 @@ func reduce(c <-chan *Result) {
 			/* We don't, so just add a new end entry */
 			endm[r.end] = r
 		}
-		_ = r
 	}
 }
 
